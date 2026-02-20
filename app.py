@@ -7,11 +7,16 @@ from wordfreq import top_n_list
 import streamlit.components.v1 as components
 
 SEEDS = [
-    "RELATES", "STREAMS", "PAINTER", "DEALERS",
-    "TRACING", "SALTIER", "RETINAL", "ENTAILS",
-    "SEALANT", "STAINER", "REPAINT", "TANGIER",
-    "GRANTED", "TRAINED", "ARTISTS", "TEARING",
-    "EARTHLY", "PLANTER", "RATINGS", "INSTEAD"
+    "RAINBOW", "SILENCE", "CAPTURE", "NETWORK", "ORCHARD",
+    "TREASON", "BALANCE", "HARMONY", "LIBRARY", "MOUNTAIN",
+    "FANTASY", "TRIANGLE", "NOTEBOOK", "FIREPLACE", "SUNLIGHT",
+    "PAINTER", "CARTOON", "MIRACLE", "FOREIGN", "GLACIER",
+    "WHISPER", "JOURNAL", "KITCHEN", "MONSTER", "PICTURE",
+    "ROCKETS", "SCARLET", "THEATER", "VICTORY", "WEALTHY",
+    "ADVENTURE", "BRILLIANT", "CREATION", "DISCOVER", "ELEGANCE",
+    "FREEDOM", "GARDENS", "HORIZON", "IMAGINE", "JUNCTION",
+    "KINGDOMS", "LANGUAGE", "MOMENTS", "NATURAL", "PASSION",
+    "QUANTUM", "RESCUE", "SEASONS", "THOUGHT", "WONDER"
 ]
 
 # public applause sound (autoplayed via HTML audio tag)
@@ -80,6 +85,7 @@ def start_new_game():
         found=[],
         score=0,
         guess_input="",
+        show_pangram=False,
     )
 
 
@@ -179,14 +185,54 @@ def main():
     )
     st.title("LetterRing")
 
-    # handle letter clicks via query param ?add=X
-    params = st.query_params
-    if "add" in params:
-        letter = params.get("add", [""])[0].upper()
-        if letter:
-            st.session_state["guess_input"] = st.session_state.get("guess_input", "") + letter
-        # clear query params to avoid duplicate appends on reload
-        st.experimental_set_query_params(**{})
+    st.markdown("""
+    <style>
+    /* Dark theme: black background, white text */
+    html, body, .stApp {
+      background: #000000 !important;
+      color: #ffffff !important;
+    }
+
+    /* Default letter/button appearance: dark surface with white text */
+    .stButton>button {
+      background: linear-gradient(180deg, #111827, #0b1220) !important;
+      color: #ffffff;
+      border: 1px solid rgba(255,255,255,0.04) !important;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.6) !important;
+      border-radius: 12px !important;
+      min-width: 64px !important;
+      height: 64px !important;
+      font-size: 22px !important;
+      padding: 0 12px !important;
+    }
+
+    /* Make primary letter buttons larger and circular via class applied below */
+    .letter-btn {
+      width: 84px !important;
+      height: 84px !important;
+      border-radius: 50% !important;
+      font-size: 28px !important;
+      padding: 0 !important;
+    }
+    .letter-center-btn {
+      width: 110px !important;
+      height: 110px !important;
+      font-size: 36px !important;
+      border-radius: 50% !important;
+    }
+
+    /* Mandatory center letter: ensure button and its contents are red and bold */
+    .letter-center, .letter-center a { color: #ff3b30 !important; font-weight: 900 !important; }
+    .letter-center-btn, .letter-center-btn * { color: #ff3b30 !important; font-weight: 900 !important; }
+    .letter-center-btn { background: linear-gradient(180deg, #fff6ea, #ffd89b) !important; border-color: rgba(255,59,48,0.12) !important; }
+
+    /* Dark translucent UI container for contrast */
+    .block-container { background: rgba(0,0,0,0.6) !important; }
+    </style>
+    """, unsafe_allow_html=True)
+
+
+    # Use native Streamlit buttons for letters (avoids full-page navigation)
 
     if "letters" not in st.session_state:
         start_new_game()
@@ -207,39 +253,98 @@ def main():
         else:
             display.append(next(other_iter))
 
-    # render clickable letter circles (each is an anchor linking to ?add=LETTER)
-    css = """
-    <style>
-    .letter-circle {
-      display:inline-block;
-      width:84px;
-      height:84px;
-      line-height:84px;
-      border-radius:50%;
-      text-align:center;
-      font-weight:800;
-      font-size:28px;
-      color:#111827;
-      background: #ffffff;
-      box-shadow: 0 10px 24px rgba(2,6,23,0.08);
-      margin: 6px;
-      text-decoration:none;
-      transition: transform 0.12s ease, box-shadow 0.12s ease;
-    }
-    .letter-circle:hover { transform: translateY(-6px); box-shadow: 0 20px 40px rgba(2,6,23,0.12); }
-    .letter-center { background: radial-gradient(circle at 30% 30%, #fff6ea, #ffd89b); color:#b91c1c !important; width:110px; height:110px; line-height:110px; font-size:36px; box-shadow: 0 18px 42px rgba(2,6,23,0.14); }
-    .letters-row { display:flex; align-items:center; justify-content:center; gap:8px; flex-wrap:nowrap; }
-    </style>
-    """
-    parts = [css, "<div class='letters-row'>"]
-    for L in display:
-        cls = "letter-circle letter-center" if L == mandatory else "letter-circle"
-        if L == mandatory:
-            parts.append(f"<a class='{cls}' href='?add={L}' style='color:#b91c1c !important'>{L}</a>")
-        else:
-            parts.append(f"<a class='{cls}' href='?add={L}'>{L}</a>")
-    parts.append("</div>")
-    st.markdown("".join(parts), unsafe_allow_html=True)
+    # Render letters as native Streamlit buttons in columns so clicks are handled server-side
+    cols = st.columns(len(display))
+    for i, L in enumerate(display):
+        with cols[i]:
+            btn_key = f"letter_{i}"
+            clicked = st.button(L, key=btn_key, on_click=append_letter, args=(L,))
+
+    # Single client-side script to style letter buttons (make them circular) and
+    # mark the mandatory center letter red & bold.
+    components.html(
+        f"""
+        <script>
+        (function(){{
+          const mandatory = "{mandatory}";
+          function styleLetters() {{
+            const buttons = Array.from(document.querySelectorAll('button'));
+            for (const b of buttons) {{
+              const txt = (b.textContent || '').trim();
+              // consider as letter button if text is a single uppercase letter A-Z
+              if (/^[A-Z]$/.test(txt)) {{
+                b.classList.add('letter-btn');
+                // ensure shape/size
+                b.style.width = '84px';
+                b.style.height = '84px';
+                b.style.borderRadius = '50%';
+                b.style.fontSize = '28px';
+                b.style.padding = '0';
+                b.style.lineHeight = '84px';
+                if (txt === mandatory) {{
+                  b.classList.add('letter-center-btn');
+                  b.style.color = '#ff3b30';
+                  b.style.fontWeight = '900';
+                  // also try to color inner elements
+                  try {{ const inner = b.querySelector('*'); if (inner) {{ inner.style.color = '#ff3b30'; inner.style.fontWeight='900'; }} }} catch(e){{}}
+                }} else {{
+                  b.style.color = '#ffffff';
+                  try {{ const inner = b.querySelector('*'); if (inner) {{ inner.style.color = '#ffffff'; }} }} catch(e){{}}
+                }}
+              }}
+            }}
+          }}
+          styleLetters();
+          const mo = new MutationObserver(styleLetters);
+          mo.observe(document.body, {{ childList: true, subtree: true }});
+          // run a few times to handle late renders
+          let runs = 0;
+          const iv = setInterval(function(){{ styleLetters(); runs++; if (runs>20) clearInterval(iv); }}, 150);
+        }})();
+        </script>
+        """,
+        height=0,
+    )
+
+    # Extra script: ensure the mandatory (center) letter is styled red by directly setting inline styles
+    components.html(
+        """
+        <script>
+        (function(){
+          const centerLabel = `%s`;
+          function styleCenter(){
+            const buttons = Array.from(document.querySelectorAll('button'));
+            for (const b of buttons){
+              try {
+                const aria = (b.getAttribute('aria-label') || '').toLowerCase();
+                const text = (b.textContent || '').trim();
+                // match by exact text, inclusion, or aria-label containing the center label
+                if (text === centerLabel || text.includes(centerLabel) || aria.includes(centerLabel.toLowerCase())) {
+                  b.style.color = '#ff3b30';
+                  b.style.fontWeight = '900';
+                  b.style.borderColor = '#ff3b30';
+                  const inner = b.querySelector('*');
+                  if (inner) { inner.style.color = '#ff3b30'; inner.style.fontWeight = '900'; }
+                  return;
+                }
+              } catch(e){}
+            }
+          }
+          styleCenter();
+          const mo = new MutationObserver(styleCenter);
+          mo.observe(document.body, { childList: true, subtree: true });
+          setInterval(styleCenter, 250);
+        })();
+        </script>
+        """ % (mandatory),
+        height=0,
+    )
+
+    # Visible mandatory letter indicator (always red and bold)
+    st.markdown(
+        f"<div style='text-align:center; margin-top:8px; font-size:22px; font-weight:900; color:#ff3b30'>Mandatory letter: {mandatory}</div>",
+        unsafe_allow_html=True,
+    )
 
     # New Game button
     if st.button("New Game"):
@@ -248,6 +353,42 @@ def main():
     st.markdown("Enter guesses below (minimum length 3, must include the highlighted letter).")
     st.text_input("Your guess", key="guess_input", placeholder="Type a word and press Submit")
     st.button("Submit", on_click=handle_submit)
+
+    # Make the "Submit" and "New Game" buttons' text red and bold via small DOM script.
+    components.html(
+        """
+        <script>
+        (function(){
+          const CSS = `.lr-red-btn { color: #ff3b30 !important; font-weight: 800 !important; border-color: #ff3b30 !important; }`;
+          const style = document.createElement('style');
+          style.appendChild(document.createTextNode(CSS));
+          document.head.appendChild(style);
+
+          function markButtons(){
+            document.querySelectorAll('button').forEach(function(b){
+              const text = (b.textContent || '').trim().toLowerCase();
+              if (text.includes('submit') || text.includes('new game')) {
+                b.classList.add('lr-red-btn');
+              }
+            });
+          }
+
+          // run periodically to catch Streamlit re-renders
+          markButtons();
+          const mo = new MutationObserver(markButtons);
+          mo.observe(document.body, { childList: true, subtree: true });
+          // also run on interval briefly to be safe
+          let runs = 0;
+          const iv = setInterval(function(){
+            markButtons();
+            runs += 1;
+            if (runs > 20) { clearInterval(iv); }
+          }, 200);
+        })();
+        </script>
+        """,
+        height=0,
+    )
 
     st.divider()
     found = st.session_state.get("found", [])
@@ -263,9 +404,16 @@ def main():
 
     st.expander("Found words").write(sorted(found))
 
-    with st.expander("Show all valid words"):
-        st.write(f"Total possible: {len(st.session_state['valid_words'])}")
-        st.write(st.session_state["valid_words"])
+    # Button to reveal pangrams (words that use all 7 letters)
+    if st.button("Show Pangrams"):
+        st.session_state["show_pangram"] = True
+
+    if st.session_state.get("show_pangram"):
+        all_pangrams = [w for w in st.session_state.get("valid_words", []) if is_pangram(w, letters_set)]
+        if all_pangrams:
+            st.success(f"Pangrams ({len(all_pangrams)}): {', '.join(all_pangrams)}")
+        else:
+            st.info("No pangrams available for this letter set.")
 
 
 if __name__ == "__main__":
