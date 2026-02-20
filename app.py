@@ -346,12 +346,30 @@ def main():
         unsafe_allow_html=True,
     )
 
-    # New Game button
-    if st.button("New Game"):
-        start_new_game()
+    # New Game and Shuffle controls
+    col_a, col_b = st.columns(2)
+    with col_a:
+        if st.button("New Game"):
+            start_new_game()
+    with col_b:
+        if st.button("Shuffle"):
+            # shuffle the non-mandatory letters while keeping the mandatory letter present
+            letters = st.session_state.get("letters", [])
+            mandatory = st.session_state.get("mandatory")
+            if letters and mandatory:
+                others = [l for l in letters if l != mandatory]
+                random.shuffle(others)
+                # place mandatory back into the middle position
+                n = len(letters)
+                mid = n // 2
+                new_letters = others[:mid] + [mandatory] + others[mid:]
+                st.session_state["letters"] = new_letters
+                # reset pangram reveal
+                st.session_state["show_pangram"] = False
 
     st.markdown("Enter guesses below (minimum length 3, must include the highlighted letter).")
-    st.text_input("Your guess", key="guess_input", placeholder="Type a word and press Submit")
+    # Submit when the user presses Enter by using on_change callback
+    st.text_input("Your guess", key="guess_input", placeholder="Type a word and press Submit", on_change=handle_submit)
     st.button("Submit", on_click=handle_submit)
 
     # Make the "Submit" and "New Game" buttons' text red and bold via small DOM script.
